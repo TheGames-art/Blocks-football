@@ -2,92 +2,132 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AI Block Football</title>
+<title>Ultimate AI Block Football</title>
 <style>
-  body { margin: 0; overflow: hidden; background: #222; }
+  body { margin:0; overflow:hidden; background:#222; font-family:sans-serif; }
+  #hud {
+    position:absolute; top:10px; left:10px; color:white; font-size:18px;
+    background:rgba(0,0,0,0.5); padding:10px; border-radius:5px;
+  }
 </style>
 </head>
 <body>
+<div id="hud">Red: 0 | Blue: 0</div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
 <script>
-// Scene setup
+// --- Scene Setup ---
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer();
+scene.background = new THREE.Color(0x222222);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Field
-const fieldGeometry = new THREE.PlaneGeometry(20, 10);
-const fieldMaterial = new THREE.MeshBasicMaterial({color: 0x00aa00});
-const field = new THREE.Mesh(fieldGeometry, fieldMaterial);
-field.rotation.x = -Math.PI / 2;
+// --- Lighting ---
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
+const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+directional.position.set(0,20,10);
+scene.add(directional);
+
+// --- Field ---
+const fieldWidth = 20;
+const fieldHeight = 10;
+const fieldGeo = new THREE.PlaneGeometry(fieldWidth, fieldHeight);
+const fieldMat = new THREE.MeshPhongMaterial({color:0x006600});
+const field = new THREE.Mesh(fieldGeo, fieldMat);
+field.rotation.x = -Math.PI/2;
 scene.add(field);
 
-// Blocks
+// --- Field boundaries ---
+const boundaryGeo = new THREE.BoxGeometry(fieldWidth+0.2, 1, 0.2);
+const boundaryMat = new THREE.MeshBasicMaterial({color:0xffffff});
+const bound1 = new THREE.Mesh(boundaryGeo, boundaryMat);
+const bound2 = new THREE.Mesh(boundaryGeo, boundaryMat);
+bound1.position.set(0,0.5,fieldHeight/2+0.1);
+bound2.position.set(0,0.5,-fieldHeight/2-0.1);
+scene.add(bound1,bound2);
+
+// --- Blocks ---
 function createBlock(color, x) {
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
-  const material = new THREE.MeshBasicMaterial({color});
-  const block = new THREE.Mesh(geometry, material);
-  block.position.set(x, 0.5, 0);
+  const geo = new THREE.BoxGeometry(1,1,1);
+  const mat = new THREE.MeshPhongMaterial({color});
+  const block = new THREE.Mesh(geo, mat);
+  block.position.set(x,0.5,0);
   scene.add(block);
   return block;
 }
+const block1 = createBlock(0xff0000,-8);
+const block2 = createBlock(0x0000ff,8);
 
-const block1 = createBlock(0xff0000, -8);
-const block2 = createBlock(0x0000ff, 8);
-
-// Ball
-const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
-const ballMat = new THREE.MeshBasicMaterial({color: 0xffff00});
+// --- Ball ---
+const ballGeo = new THREE.SphereGeometry(0.5,32,32);
+const ballMat = new THREE.MeshPhongMaterial({color:0xffff00});
 const ball = new THREE.Mesh(ballGeo, ballMat);
-ball.position.y = 0.5;
+ball.position.y=0.5;
 scene.add(ball);
+let ballVelocity = new THREE.Vector3(0.25,0,0.1);
 
-let ballVelocity = new THREE.Vector3(0.2, 0, 0.1);
+// --- Scores ---
+let score1=0, score2=0;
+const hud = document.getElementById("hud");
 
-// AI Skill (reaction speed, improves over time)
-let block1Skill = 0.02;
-let block2Skill = 0.02;
+// --- AI skill ---
+let skill1=0.03, skill2=0.03;
 
-// Camera
-camera.position.set(0, 15, 20);
+// --- Camera ---
+camera.position.set(0,15,20);
 camera.lookAt(0,0,0);
 
-// Resize
-window.addEventListener('resize', () => {
+// --- Resize ---
+window.addEventListener('resize',()=>{
   renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
 });
 
-// Animation
-function animate() {
+// --- Animate ---
+function animate(){
   requestAnimationFrame(animate);
 
-  // Ball movement
+  // Move ball
   ball.position.add(ballVelocity);
 
   // Bounce off walls
-  if(ball.position.z > 5 || ball.position.z < -5) ballVelocity.z *= -1;
+  if(ball.position.z>fieldHeight/2-0.5 || ball.position.z<-fieldHeight/2+0.5) ballVelocity.z*=-1;
+  if(ball.position.x>fieldWidth/2-0.5 || ball.position.x<-fieldWidth/2+0.5) ballVelocity.x*=-1;
 
-  // AI blocks move toward ball
-  [ [block1, block1Skill], [block2, block2Skill] ].forEach(([block, skill]) => {
-    if(Math.abs(block.position.x - ball.position.x) < 0.1) return;
-    block.position.x += (ball.position.x - block.position.x) * skill;
+  // AI move blocks
+  [[block1, skill1],[block2, skill2]].forEach(([block, skill], idx)=>{
+    const dirX = ball.position.x - block.position.x;
+    const dirZ = ball.position.z - block.position.z;
+    block.position.x += dirX*skill;
+    block.position.z += dirZ*skill;
+    // Keep inside field
+    block.position.x = Math.max(Math.min(block.position.x, fieldWidth/2-0.5), -fieldWidth/2+0.5);
+    block.position.z = Math.max(Math.min(block.position.z, fieldHeight/2-0.5), -fieldHeight/2+0.5);
   });
 
   // Hit detection
-  [[block1, block1Skill], [block2, block2Skill]].forEach(([block, skill]) => {
-    if(ball.position.distanceTo(block.position) < 1) {
-      ballVelocity.x *= -1; // reflect
-      skill += 0.001; // improves over time
+  [[block1, skill1, 'red'],[block2, skill2, 'blue']].forEach(([block, skill, color], idx)=>{
+    if(ball.position.distanceTo(block.position)<1){
+      ballVelocity.x*=-1;
+      ballVelocity.z+= (Math.random()-0.5)*0.2; // add randomness
+      if(color==='red'){score1++; skill1+=0.002;} else {score2++; skill2+=0.002;}
+      hud.textContent = `Red: ${score1} | Blue: ${score2}`;
+      // Speed up ball slightly
+      ballVelocity.multiplyScalar(1.05);
     }
   });
 
-  renderer.render(scene, camera);
-}
+  // Reset ball if it stops
+  if(ballVelocity.length()<0.05){
+    ball.position.set(0,0.5,0);
+    ballVelocity.set(0.25*(Math.random()>0.5?1:-1),0,0.1*(Math.random()>0.5?1:-1));
+  }
 
+  renderer.render(scene,camera);
+}
 animate();
 </script>
 </body>
