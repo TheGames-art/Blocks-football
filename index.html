@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Block Football</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #222; }
+</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+<script>
+// Scene setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Field
+const fieldGeometry = new THREE.PlaneGeometry(20, 10);
+const fieldMaterial = new THREE.MeshBasicMaterial({color: 0x00aa00});
+const field = new THREE.Mesh(fieldGeometry, fieldMaterial);
+field.rotation.x = -Math.PI / 2;
+scene.add(field);
+
+// Blocks
+function createBlock(color, x) {
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const material = new THREE.MeshBasicMaterial({color});
+  const block = new THREE.Mesh(geometry, material);
+  block.position.set(x, 0.5, 0);
+  scene.add(block);
+  return block;
+}
+
+const block1 = createBlock(0xff0000, -8);
+const block2 = createBlock(0x0000ff, 8);
+
+// Ball
+const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
+const ballMat = new THREE.MeshBasicMaterial({color: 0xffff00});
+const ball = new THREE.Mesh(ballGeo, ballMat);
+ball.position.y = 0.5;
+scene.add(ball);
+
+let ballVelocity = new THREE.Vector3(0.2, 0, 0.1);
+
+// AI Skill (reaction speed, improves over time)
+let block1Skill = 0.02;
+let block2Skill = 0.02;
+
+// Camera
+camera.position.set(0, 15, 20);
+camera.lookAt(0,0,0);
+
+// Resize
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// Animation
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Ball movement
+  ball.position.add(ballVelocity);
+
+  // Bounce off walls
+  if(ball.position.z > 5 || ball.position.z < -5) ballVelocity.z *= -1;
+
+  // AI blocks move toward ball
+  [ [block1, block1Skill], [block2, block2Skill] ].forEach(([block, skill]) => {
+    if(Math.abs(block.position.x - ball.position.x) < 0.1) return;
+    block.position.x += (ball.position.x - block.position.x) * skill;
+  });
+
+  // Hit detection
+  [[block1, block1Skill], [block2, block2Skill]].forEach(([block, skill]) => {
+    if(ball.position.distanceTo(block.position) < 1) {
+      ballVelocity.x *= -1; // reflect
+      skill += 0.001; // improves over time
+    }
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
